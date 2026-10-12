@@ -29,9 +29,9 @@
 
 - **Screenshots:** add `fastlane/metadata/android/en-US/images/phoneScreenshots/1.png`, `2.png`…
   They're picked up from the next release.
-- **Reproducible builds:** once a GitHub release APK and F-Droid's build are confirmed identical,
-  add `Binaries:` and `AllowedAPKSigningKeys:` to the recipe so F-Droid ships your signed APK.
-  Users could then switch between GitHub and F-Droid without reinstalling.
+- **Reproducible builds:** already enabled. The recipe has `Binaries:` and
+  `AllowedAPKSigningKeys:`, so F-Droid ships your signed GitHub APK once its own build matches.
+  Every release must stay reproducible, or F-Droid won't publish it.
 
 ## Anti-feature labels reviewers might add
 
