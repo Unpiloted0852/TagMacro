@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">TagMacro</string>
+    <string name="a11y_label">TagMacro messaging</string>
+    <string name="a11y_description">Lets TagMacro send Signal and WhatsApp messages, share WhatsApp live location, and lock the screen when one of your macros asks it to. It only receives events from Signal and WhatsApp and does nothing unless a macro is running one of those actions. TagMacro has no internet access.</string>
+</resources>

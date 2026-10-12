@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Complete list of permissions. There is deliberately no INTERNET permission,
+        so Android will not let this app open any network connection.
+    -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- Optional, granted by you in Settings. Used only for brightness, screen timeout and auto-rotate. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!--
+        Optional, and off until you grant it in Settings. TagMacro never draws anything over your
+        screen. This permission is one of Android's listed exemptions from the rule that blocks an
+        app with no visible window from opening another app, which is what lets a macro set several
+        alarms in a row instead of only the first.
+    -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <!--
+        Asked for only when you tap "Use my current location" or insert {location}. Used only
+        while TagMacro is on screen, never in the background. Contacts need no permission: the
+        system contact picker hands over just the one contact you choose.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
+    <!--
+        Asked for only when you set an SMS or call action to act straight away. With the
+        "open my messaging app" or "open the dialer" options, neither is needed.
+    -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+    <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
+    <uses-feature android:name="android.hardware.nfc" android:required="true" />
+
+    <!-- Apps this app may look up: launchable apps (for "Open an app"), TTS engines, and Signal. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="false"
+        android:enableOnBackInvokedCallback="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Invisible. Receives tags carrying this app's trigger record, and home screen shortcuts. -->
+        <activity
+            android:name=".TriggerActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity=""
+            android:theme="@style/TriggerTheme">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.dev.tagmacro" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Receives any tag, for "matched by serial number" macros. Disabled by default;
+            the app switches it on only while such a macro exists (see Store.kt).
+        -->
+        <activity-alias
+            android:name=".UidTrigger"
+            android:enabled="false"
+            android:exported="true"
+            android:targetActivity=".TriggerActivity">
+            <intent-filter>
+                <action android:name="android.nfc.action.TECH_DISCOVERED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.nfc.action.TECH_DISCOVERED"
+                android:resource="@xml/nfc_tech_filter" />
+        </activity-alias>
+
+        <!-- Only the system can bind to this (BIND_ACCESSIBILITY_SERVICE). -->
+        <service
+            android:name=".SignalService"
+            android:exported="true"
+            android:label="@string/a11y_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_config" />
+        </service>
+    </application>
+</manifest>

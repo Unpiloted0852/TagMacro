@@ -1,0 +1,8 @@
+<resources>
+    <color name="ic_launcher_background">#1F6B58</color>
+    <!-- Keep in step with Palette in Ui.kt. -->
+    <color name="app_background">#F3F6F5</color>
+    <color name="app_surface">#FFFFFF</color>
+    <color name="app_primary">#1F6B58</color>
+    <color name="app_on_surface">#151D1A</color>
+</resources>

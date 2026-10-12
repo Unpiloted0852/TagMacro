@@ -1,0 +1,19 @@
+<resources>
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorPrimary">@color/app_primary</item>
+        <item name="android:colorPrimaryDark">@color/app_background</item>
+        <item name="android:colorAccent">@color/app_primary</item>
+        <item name="android:colorControlActivated">@color/app_primary</item>
+        <item name="android:windowBackground">@color/app_background</item>
+        <item name="android:textColorPrimary">@color/app_on_surface</item>
+        <item name="android:alertDialogTheme">@style/AppDialog</item>
+        <item name="android:timePickerDialogTheme">@style/AppDialog</item>
+    </style>
+
+    <style name="AppDialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+        <item name="android:colorAccent">@color/app_primary</item>
+        <item name="android:colorControlActivated">@color/app_primary</item>
+        <item name="android:textColorPrimary">@color/app_on_surface</item>
+    </style>
+</resources>

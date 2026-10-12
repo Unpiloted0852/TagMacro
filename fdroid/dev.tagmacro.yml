@@ -1,0 +1,29 @@
+# Build recipe for F-Droid. This file does NOT live in the app repository: it goes in a fork of
+# https://gitlab.com/fdroid/fdroiddata as metadata/dev.tagmacro.yml, submitted as a merge request.
+Categories:
+  - System
+  - Connectivity
+License: GPL-3.0-or-later
+AuthorName: Unpiloted0852
+SourceCode: https://github.com/Unpiloted0852/TagMacro
+IssueTracker: https://github.com/Unpiloted0852/TagMacro/issues
+Changelog: https://github.com/Unpiloted0852/TagMacro/releases
+Donate: https://ko-fi.com/unpiloted0852
+
+AutoName: TagMacro
+
+RepoType: git
+Repo: https://github.com/Unpiloted0852/TagMacro.git
+
+Builds:
+  - versionName: '1.0'
+    versionCode: 1
+    commit: v1.0
+    subdir: app
+    gradle:
+      - yes
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: '1.0'
+CurrentVersionCode: 1

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Each tech-list matches on its own, so together these match any tag. -->
+<resources>
+    <tech-list><tech>android.nfc.tech.NfcA</tech></tech-list>
+    <tech-list><tech>android.nfc.tech.NfcB</tech></tech-list>
+    <tech-list><tech>android.nfc.tech.NfcF</tech></tech-list>
+    <tech-list><tech>android.nfc.tech.NfcV</tech></tech-list>
+    <tech-list><tech>android.nfc.tech.IsoDep</tech></tech-list>
+</resources>

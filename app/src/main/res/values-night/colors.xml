@@ -1,0 +1,6 @@
+<resources>
+    <color name="app_background">#0E1412</color>
+    <color name="app_surface">#18211F</color>
+    <color name="app_primary">#7FD0B9</color>
+    <color name="app_on_surface">#E1E9E6</color>
+</resources>

@@ -1,0 +1,74 @@
+# Builds a signed APK and attaches it to a GitHub release.
+# Runs when a release is published, or by hand for an existing release tag.
+# Needs four repository secrets (see SIGNING.md): TAGMACRO_KEYSTORE_BASE64,
+# TAGMACRO_KEYSTORE_PASSWORD, TAGMACRO_KEY_ALIAS, TAGMACRO_KEY_PASSWORD.
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build and attach the APK to (e.g. v1.0)
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Restore signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.TAGMACRO_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::error::Signing secrets are missing. Run scripts/make-signing-key.sh (see SIGNING.md)."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed APK
+        env:
+          TAGMACRO_KEYSTORE: ${{ runner.temp }}/release.jks
+          TAGMACRO_KEYSTORE_PASSWORD: ${{ secrets.TAGMACRO_KEYSTORE_PASSWORD }}
+          TAGMACRO_KEY_ALIAS: ${{ secrets.TAGMACRO_KEY_ALIAS }}
+          TAGMACRO_KEY_PASSWORD: ${{ secrets.TAGMACRO_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Verify signature and attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk="TagMacro-${TAG}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          bt="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$bt/apksigner" verify --print-certs "$apk" | tee signature.txt
+          sha256sum "$apk" > SHA256SUMS.txt
+          cert=$(grep -m1 'certificate SHA-256 digest' signature.txt | awk '{print $NF}')
+          {
+            echo
+            echo "**APK:** \`$(cut -d' ' -f1 SHA256SUMS.txt)\` (SHA-256)"
+            echo "**Signing certificate:** \`$cert\` (SHA-256)"
+          } > extra-notes.md
+          gh release upload "$TAG" "$apk" SHA256SUMS.txt --clobber
+          body=$(gh release view "$TAG" --json body --jq .body)
+          if ! grep -q "Signing certificate" <<<"$body"; then
+            printf '%s\n%s\n' "$body" "$(cat extra-notes.md)" > notes.md
+            gh release edit "$TAG" --notes-file notes.md
+          fi
+          rm -f "$RUNNER_TEMP/release.jks"

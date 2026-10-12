@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A tag with signal waves. Drawn inside the 66dp safe zone of the 108dp adaptive icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M36,38 L58,38 A6,6 0 0 1 64,44 L64,64 A6,6 0 0 1 58,70 L36,70 A6,6 0 0 1 30,64 L30,44 A6,6 0 0 1 36,38 Z" />
+    <path
+        android:fillColor="#1F6B58"
+        android:pathData="M47,50 A4,4 0 1 1 47,58 A4,4 0 1 1 47,50 Z" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M70,44 A14,14 0 0 1 70,64" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M76,38 A22,22 0 0 1 76,70" />
+</vector>

@@ -1,0 +1,1 @@
+First release: NFC macros with 27 actions, templates, a journal, Signal and WhatsApp messaging, and a full tag reader and writer including Wi-Fi tags.

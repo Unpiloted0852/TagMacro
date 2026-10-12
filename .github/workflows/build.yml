@@ -1,0 +1,30 @@
+# Builds the app on every push and pull request, so a broken build is caught before release
+# (and before F-Droid's build server sees it). The unsigned APK is kept as a run artifact.
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: gradle/actions/wrapper-validation@v6
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Build release APK (unsigned)
+        run: ./gradlew --no-daemon assembleRelease
+      - uses: actions/upload-artifact@v7
+        with:
+          name: TagMacro-unsigned
+          path: app/build/outputs/apk/release/*.apk
