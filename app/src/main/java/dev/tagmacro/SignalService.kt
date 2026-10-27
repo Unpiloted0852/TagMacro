@@ -228,7 +228,8 @@ class SignalService : AccessibilityService() {
     private fun signalStep(j: SignalJob, now: Long) {
         val root = rootInActiveWindow
         if (root == null || root.packageName?.toString() != j.s.signalPackage) {
-            j.stage = "waiting for Signal to open"
+            j.stage = if (now - j.startedAt < 4000) "waiting for Signal to open"
+            else "waiting for Signal to be in front (${frontApp()?.let { "in front: $it" } ?: "another window may be covering it"})"
             schedule(300)
             return
         }
@@ -405,7 +406,7 @@ class SignalService : AccessibilityService() {
         val roots = waRoots(s.waPackage)
         if (roots.isEmpty()) {
             j.stage = if (now - j.startedAt < 4000) "waiting for WhatsApp to open"
-            else "waiting for WhatsApp to be in front (another window, such as a permission prompt, may be covering it)"
+            else "waiting for WhatsApp to be in front (${frontApp()?.let { "in front: $it" } ?: "another window, such as a permission prompt, may be covering it"})"
             schedule(300)
             return
         }
@@ -499,14 +500,19 @@ class SignalService : AccessibilityService() {
             WaPhase.LIVE -> clickPhase(j, roots, now, list(s.waLiveLabels), emptyList(),
                 WaPhase.DURATION, "choosing Share live location")
             WaPhase.DURATION -> {
-                val labels = list(s.waDurationLabels)
                 val idx = when (j.duration) { "15m" -> 0; "8h" -> 2; else -> 1 }
-                val label = labels.getOrNull(idx)
-                if (label == null) {
-                    finish(j, "The live-location duration labels in Settings need three entries")
+                val label = list(s.waDurationLabels).getOrNull(idx)
+                // Labels from Settings first. Otherwise the option's number (15, 1 or 8), which
+                // works whatever language WhatsApp is in: "8 hours", "8 Stunden", "8 heures"...
+                val byNumber = if (label != null && findLabelled(roots, listOf(label), emptyList()) != null) null
+                    else findDuration(roots, intArrayOf(15, 1, 8)[idx])
+                if (byNumber != null && click(byNumber)) {
+                    j.stage = "choosing how long to share"
+                    advance(j, WaPhase.COMMENT)
+                    schedule(900)
                     return
                 }
-                clickPhase(j, roots, now, listOf(label), emptyList(), WaPhase.COMMENT, "choosing how long to share")
+                clickPhase(j, roots, now, listOfNotNull(label), emptyList(), WaPhase.COMMENT, "choosing how long to share")
             }
             WaPhase.COMMENT -> {
                 if (j.comment.isNotBlank()) {
@@ -637,6 +643,32 @@ class SignalService : AccessibilityService() {
             labels.any { it.equals(desc, ignoreCase = true) || it.equals(txt, ignoreCase = true) } ||
                 (id.isNotEmpty() && ids.any { it == id })
         }
+    }
+
+    /**
+     * A live-location duration option by its number: visible text that starts with the number and
+     * has no other digits, such as "8 hours" or "8 Stunden" (but not "18 hours" or "10:00").
+     * Only trusted when all three options (15, 1 and 8) are on screen together, so a chat message
+     * like "1 more thing" behind the picker can't be mistaken for one.
+     */
+    private fun findDuration(roots: List<AccessibilityNodeInfo>, number: Int): AccessibilityNodeInfo? {
+        val nodes = roots.flatMap { walk(it) }.filter { n -> n.isVisibleToUser && n.isEnabled && !n.isEditable }
+        fun option(k: Int): AccessibilityNodeInfo? {
+            val pattern = Regex("^\\s*$k(?!\\d)\\D{1,25}$")
+            return nodes.firstOrNull { pattern.matches(label(it)) }
+        }
+        val options = listOf(15, 1, 8).associateWith { option(it) }
+        return if (options.values.all { it != null }) options[number] else null
+    }
+
+    /** The app whose window is in front, for log messages: its package name, or the window title. */
+    private fun frontApp(): String? = try {
+        rootInActiveWindow?.packageName?.toString()
+            ?: windows.firstOrNull { it.isActive }?.let { w ->
+                w.root?.packageName?.toString() ?: if (Build.VERSION.SDK_INT >= 24) w.title?.toString() else null
+            }
+    } catch (e: Exception) {
+        null
     }
 
     /** Clicks the node, or the nearest clickable parent. */

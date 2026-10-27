@@ -1,0 +1,1 @@
+WhatsApp live location now works when WhatsApp is in German, and the duration (15 minutes, 1 hour, 8 hours) is recognised in any language. If WhatsApp isn't in front when a step runs, the log now names the app that is. Clearer wording about what macro tags contain.

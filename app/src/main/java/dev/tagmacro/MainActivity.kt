@@ -525,7 +525,7 @@ class MainActivity : Activity() {
         trig.addView(ui.choiceCards(
             listOf(
                 Triple(TriggerType.NFC_TOKEN.name, "A tag written by TagMacro",
-                    "Recommended. The tag holds only a random code, never your messages or contacts."),
+                    "Recommended. The tag holds only a random code; the macro and its messages stay on this phone."),
                 Triple(TriggerType.NFC_UID.name, "Any tag or card, by serial number",
                     "Works with transit cards, key fobs and tags you can't write to."),
                 Triple(TriggerType.MANUAL.name, "No tag",
@@ -1980,11 +1980,11 @@ class MainActivity : Activity() {
             waField("Attach button view IDs", s.waAttachIds) { s.waAttachIds = it }
             waField("\"Location\" menu item", s.waLocationLabels) { s.waLocationLabels = it }
             waField("\"Share live location\" item", s.waLiveLabels) { s.waLiveLabels = it }
-            waField("Durations (15 min, 1 hour, 8 hours, in that order)", s.waDurationLabels) { s.waDurationLabels = it }
+            waField("Durations (15 min, 1 hour, 8 hours, in that order; optional, the numbers are matched in any language)", s.waDurationLabels) { s.waDurationLabels = it }
             waField("One-time notices to dismiss", s.waDismissLabels) { s.waDismissLabels = it }
             waField("Text that confirms live location started", s.waLiveConfirm) { s.waLiveConfirm = it }
             waField("Text meaning the number isn't on WhatsApp", s.waNotOnWhatsApp) { s.waNotOnWhatsApp = it }
-            wa.addView(ui.note("Comma-separated. Change these only if WhatsApp isn't in English or an update renamed something."))
+            wa.addView(ui.note("Comma-separated. English and German are built in. Change these only if WhatsApp is in another language or an update renamed something."))
         }
         col.addView(wa)
 

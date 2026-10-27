@@ -6,7 +6,7 @@ It is also a complete tag tool: read any tag, and write links, Wi-Fi details, co
 <ul>
 <li>No internet permission. Android does not let TagMacro open a network connection at all.</li>
 <li>No ads, no trackers, no analytics, and no libraries beyond the Android framework and Kotlin's standard library.</li>
-<li>Tags written by TagMacro hold only a random code, never your messages or contacts.</li>
+<li>Macro tags hold only a random code: the macro and its messages stay on your phone. (Tags you write with the tag tools, such as Wi-Fi details or contact cards, contain that information, so anyone who taps them can read it.)</li>
 <li>Every permission is optional and only requested for the actions that need it.</li>
 </ul>
 

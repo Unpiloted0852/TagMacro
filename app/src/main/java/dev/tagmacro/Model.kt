@@ -136,15 +136,15 @@ class AppSettings(
     var toastOnSuccess: Boolean = false,
     var ignoreTagsWhileOpen: Boolean = true,
     var waPackage: String = WHATSAPP_PACKAGE,
-    var waSendLabels: String = "Send",
+    var waSendLabels: String = WA_SEND,
     var waSendIds: String = "send",
-    var waAttachLabels: String = "Attach",
+    var waAttachLabels: String = WA_ATTACH,
     var waAttachIds: String = "input_attach_button",
-    var waLocationLabels: String = "Location",
-    var waLiveLabels: String = "Share live location",
+    var waLocationLabels: String = WA_LOCATION,
+    var waLiveLabels: String = WA_LIVE,
     var waDurationLabels: String = "15 minutes, 1 hour, 8 hours",
-    var waDismissLabels: String = "Continue, OK, Got it",
-    var waLiveConfirm: String = "Stop sharing",
+    var waDismissLabels: String = WA_DISMISS,
+    var waLiveConfirm: String = WA_LIVE_CONFIRM,
     var waNotOnWhatsApp: String = "isn't on WhatsApp, is not on WhatsApp",
     var waLiveTimeoutSec: Int = 40
 ) {
@@ -178,6 +178,20 @@ class AppSettings(
         const val SIGNAL_PACKAGE = "org.thoughtcrime.securesms"
         const val WHATSAPP_PACKAGE = "com.whatsapp"
 
+        // WhatsApp's wording, comma-separated, in English and German. The German labels come from
+        // a German WhatsApp screen capture (GitHub issue #1); the German "Stop sharing" text is
+        // WhatsApp's usual wording but wasn't in that capture.
+        const val WA_SEND = "Send, Senden"
+        const val WA_ATTACH = "Attach, Anhängen"
+        const val WA_LOCATION = "Location, Standort"
+        const val WA_LIVE = "Share live location, Live-Standort teilen"
+        const val WA_DISMISS = "Continue, OK, Got it, Weiter"
+        const val WA_LIVE_CONFIRM = "Stop sharing, Teilen beenden"
+
+        /** Settings saved by 1.0 hold the old English-only defaults: swap those for the new ones. */
+        private fun upgrade(saved: String, oldDefault: String, newDefault: String): String =
+            if (saved.trim() == oldDefault) newDefault else saved
+
         fun fromJson(o: JSONObject): AppSettings = AppSettings(
             signalPackage = o.optString("signalPackage", SIGNAL_PACKAGE).ifBlank { SIGNAL_PACKAGE },
             sendLabels = o.optString("sendLabels", "Send, Send message"),
@@ -191,15 +205,15 @@ class AppSettings(
             toastOnSuccess = o.optBoolean("toastOnSuccess", false),
             ignoreTagsWhileOpen = o.optBoolean("ignoreTagsWhileOpen", true),
             waPackage = o.optString("waPackage", WHATSAPP_PACKAGE).ifBlank { WHATSAPP_PACKAGE },
-            waSendLabels = o.optString("waSendLabels", "Send"),
+            waSendLabels = upgrade(o.optString("waSendLabels", WA_SEND), "Send", WA_SEND),
             waSendIds = o.optString("waSendIds", "send"),
-            waAttachLabels = o.optString("waAttachLabels", "Attach"),
+            waAttachLabels = upgrade(o.optString("waAttachLabels", WA_ATTACH), "Attach", WA_ATTACH),
             waAttachIds = o.optString("waAttachIds", "input_attach_button"),
-            waLocationLabels = o.optString("waLocationLabels", "Location"),
-            waLiveLabels = o.optString("waLiveLabels", "Share live location"),
+            waLocationLabels = upgrade(o.optString("waLocationLabels", WA_LOCATION), "Location", WA_LOCATION),
+            waLiveLabels = upgrade(o.optString("waLiveLabels", WA_LIVE), "Share live location", WA_LIVE),
             waDurationLabels = o.optString("waDurationLabels", "15 minutes, 1 hour, 8 hours"),
-            waDismissLabels = o.optString("waDismissLabels", "Continue, OK, Got it"),
-            waLiveConfirm = o.optString("waLiveConfirm", "Stop sharing"),
+            waDismissLabels = upgrade(o.optString("waDismissLabels", WA_DISMISS), "Continue, OK, Got it", WA_DISMISS),
+            waLiveConfirm = upgrade(o.optString("waLiveConfirm", WA_LIVE_CONFIRM), "Stop sharing", WA_LIVE_CONFIRM),
             waNotOnWhatsApp = o.optString("waNotOnWhatsApp", "isn't on WhatsApp, is not on WhatsApp"),
             waLiveTimeoutSec = o.optInt("waLiveTimeoutSec", 40).coerceIn(10, 180)
         )
