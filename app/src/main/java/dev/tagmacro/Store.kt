@@ -13,6 +13,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         Store.init(this)
+        Waits.rescheduleAll(this) // alarms don't survive a force stop
     }
 }
 
@@ -54,6 +55,37 @@ object Store {
             f.failWrite(out)
             throw e
         }
+    }
+
+    // ---------- macros in a timed wait ----------
+
+    private fun readParked(): MutableList<ParkedRun> {
+        val list = mutableListOf<ParkedRun>()
+        readJson("parked.json")?.let { txt ->
+            runCatching {
+                val arr = JSONArray(txt)
+                for (i in 0 until arr.length()) runCatching { list.add(ParkedRun.fromJson(arr.getJSONObject(i))) }
+            }
+        }
+        return list
+    }
+
+    private fun writeParked(list: List<ParkedRun>) {
+        val arr = JSONArray()
+        list.forEach { arr.put(it.toJson()) }
+        writeJson("parked.json", arr.toString())
+    }
+
+    fun parked(): List<ParkedRun> = synchronized(lock) { readParked() }
+
+    fun addParked(r: ParkedRun) = synchronized(lock) { writeParked(readParked() + r) }
+
+    /** Removes and returns a parked run, so a wait can only ever be continued once. */
+    fun takeParked(id: String): ParkedRun? = synchronized(lock) {
+        val list = readParked()
+        val r = list.firstOrNull { it.id == id } ?: return null
+        writeParked(list - r)
+        r
     }
 
     // ---------- macros ----------

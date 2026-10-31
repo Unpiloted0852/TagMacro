@@ -22,6 +22,8 @@ class ActionSpec(
 )
 
 object Specs {
+    const val MAX_WAIT_SEC = 86400.0
+
     const val PLACEHOLDER_HINT =
         "Tap a button below to insert live values. {location} becomes a map link to where you are."
 
@@ -131,8 +133,8 @@ object Specs {
 
         ActionSpec(
             "WAIT", "Wait",
-            listOf(Field("seconds", "Seconds", FieldKind.NUMBER, default = "2", required = true, min = 0.0, max = 3600.0))
-        ) { "Wait ${p(it, "seconds")} s" },
+            listOf(Field("seconds", "Seconds", FieldKind.NUMBER, default = "2", required = true, min = 0.0, max = MAX_WAIT_SEC))
+        ) { a -> p(a, "seconds").toDoubleOrNull()?.takeIf { it >= 60 }?.let { "Wait ${Waits.formatDuration(it.toLong())}" } ?: "Wait ${p(a, "seconds")} s" },
 
         ActionSpec(
             "LAUNCH_APP", "Open an app",
@@ -318,7 +320,7 @@ object Specs {
         "DIRECTIONS" to "Opens your maps app with directions",
         "ALARM" to "Adds an alarm to your clock app",
         "TIMER" to "Starts a countdown in your clock app",
-        "WAIT" to "Pauses before the next action",
+        "WAIT" to "Pauses before the next action, for up to 24 hours (86400 seconds). A minute or longer keeps counting while the phone sleeps or restarts",
         "TOAST" to "A brief message at the bottom of the screen",
         "SPEAK" to "Reads text out loud",
         "VIBRATE" to "A short buzz, to confirm the tap",

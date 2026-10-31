@@ -62,7 +62,13 @@ class SignalService : AccessibilityService() {
                 Runner.main.post { svc.abort(job, "Couldn't open Signal") }
                 return "Couldn't open Signal: ${e.message}"
             }
-            if (!job.latch.await(s.signalTimeoutSec + 5L, TimeUnit.SECONDS)) {
+            val finished = try {
+                job.latch.await(s.signalTimeoutSec + 5L, TimeUnit.SECONDS)
+            } catch (e: InterruptedException) {
+                Runner.main.post { svc.abort(job, "Stopped") } // or the service would still send it
+                throw e
+            }
+            if (!finished) {
                 Runner.main.post { svc.abort(job, "Timed out") }
                 return "Timed out waiting for Signal"
             }
@@ -92,7 +98,13 @@ class SignalService : AccessibilityService() {
                 Runner.main.post { svc.abort(job, openError) }
                 return openError
             }
-            if (!job.latch.await(timeout + 5L, TimeUnit.SECONDS)) {
+            val finished = try {
+                job.latch.await(timeout + 5L, TimeUnit.SECONDS)
+            } catch (e: InterruptedException) {
+                Runner.main.post { svc.abort(job, "Stopped") } // or the service would still send it
+                throw e
+            }
+            if (!finished) {
                 Runner.main.post { svc.abort(job, "Timed out") }
                 return "Timed out waiting for WhatsApp"
             }

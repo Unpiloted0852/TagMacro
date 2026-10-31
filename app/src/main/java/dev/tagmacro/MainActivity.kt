@@ -186,11 +186,14 @@ class MainActivity : Activity() {
         super.onResume()
         resumed = true
         updateReaderMode()
+        Waits.rescheduleAll(this) // picks up exact timing if it was just allowed
+        Runner.onRunsChanged = { if (editing == null && (tab == Tab.MACROS || tab == Tab.LOG)) render() }
         render() // refresh permission status after returning from system settings
     }
 
     override fun onPause() {
         resumed = false
+        Runner.onRunsChanged = null
         cancelNfcPrompt()
         updateReaderMode()
         super.onPause()
@@ -382,6 +385,36 @@ class MainActivity : Activity() {
             col.addView(warn)
         }
 
+        Runner.runningName()?.let { name ->
+            val running = ui.card()
+            running.addView(ui.title("Running: $name"))
+            val waiting = Runner.waitingCount()
+            if (waiting > 0) running.addView(ui.note("$waiting more waiting. Macros run one at a time."))
+            running.addView(ui.button("Stop", primary = true) { Runner.stopAll() })
+            col.addView(running)
+        }
+
+        Store.parked().sortedBy { it.wakeAt }.forEach { r ->
+            val waiting = ui.card()
+            waiting.addView(ui.title(r.name))
+            waiting.addView(ui.note("Next step in"))
+            waiting.addView(android.widget.Chronometer(this).apply {
+                isCountDown = true
+                base = android.os.SystemClock.elapsedRealtime() + (r.wakeAt - System.currentTimeMillis())
+                textSize = 28f
+                setTextColor(p.onSurface)
+                start()
+            })
+            if (!Waits.canExact(this)) {
+                waiting.addView(ui.note("It may run late. For exact timing, allow it in the Settings tab."))
+            }
+            waiting.addView(ui.button("Stop") {
+                Runner.stopParked(this, r.id)
+                render()
+            })
+            col.addView(waiting)
+        }
+
         if (macros.isEmpty()) {
             val start = ui.card().apply { gravity = Gravity.CENTER_HORIZONTAL }
             start.addView(ui.iconBadge("tag", sizeDp = 64).apply {
@@ -478,8 +511,9 @@ class MainActivity : Activity() {
         else if (m.askFirst) addChip(ui.chip("Asks first"))
         chips.addView(View(this), LinearLayout.LayoutParams(0, 1, 1f))
         chips.addView(ui.iconButton("play", "Run ${m.name} now", p.primary) {
+            val busy = Runner.isBusy()
             Runner.run(this, m, "Run button", null, false)
-            toast("Running \"${m.name}\"")
+            if (!busy) toast("Running \"${m.name}\"")
         })
         card.addView(chips)
         card.contentDescription = "${m.name}. ${triggerSummary(m)}. ${acts.size} actions." +
@@ -631,6 +665,7 @@ class MainActivity : Activity() {
             more.addView(ui.dangerButton("Delete macro") {
                 confirm("Delete \"${m.name}\"?", "Its tags and shortcuts will stop working.", "Delete") {
                     Store.deleteMacro(m.id)
+                    Runner.stopMacro(this, m.id)
                     runCatching {
                         getSystemService(ShortcutManager::class.java)
                             ?.disableShortcuts(listOf("macro-${m.id}"), "This macro was deleted")
@@ -839,8 +874,9 @@ class MainActivity : Activity() {
             it.enabled && it.type in setOf("SIGNAL", "WHATSAPP", "WHATSAPP_LIVE")
         }
         val go = {
+            val busy = Runner.isBusy()
             Runner.run(this, m.deepCopy(), "Test run", null, false)
-            toast("Running")
+            if (!busy) toast("Running")
         }
         if (real.isEmpty()) {
             go()
@@ -1028,7 +1064,18 @@ class MainActivity : Activity() {
 
     /** Asks for SMS or phone permission when an action has just been set to need it. */
     private fun requestActionPermissions(a: Action) {
+        if (a.type == "WAIT" && (a.params["seconds"]?.toDoubleOrNull() ?: 0.0) >= 60 && !Waits.canExact(this)) {
+            confirm(
+                "Allow exact timing?",
+                "Without \"Alarms and reminders\", long waits still run but may end late.",
+                "Open"
+            ) {
+                startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.fromParts("package", packageName, null)))
+            }
+        }
         val needed = when {
+            a.type == "WAIT" && Build.VERSION.SDK_INT >= 33 && (a.params["seconds"]?.toDoubleOrNull() ?: 0.0) >= 60 ->
+                Manifest.permission.POST_NOTIFICATIONS
             a.type == "SMS" && a.params["mode"] != "compose" -> Manifest.permission.SEND_SMS
             a.type == "CALL" && a.params["mode"] != "dial" -> Manifest.permission.CALL_PHONE
             else -> return
@@ -1883,6 +1930,13 @@ class MainActivity : Activity() {
             "Open \"Display over other apps\""
         ) { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.fromParts("package", packageName, null))) }
 
+        if (Build.VERSION.SDK_INT >= 31) {
+            permissionBlock(perms, "Alarms and reminders", Waits.canExact(this),
+                "So long waits end on time. Without it they still run, but may run late.",
+                "Open \"Alarms and reminders\""
+            ) { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.fromParts("package", packageName, null))) }
+        }
+
         fun runtime(title: String, why: String, vararg permissions: String) {
             val granted = permissions.any { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
             permissionBlock(perms, title, granted, why, if (granted) "Manage in App info" else "Allow") {
@@ -1896,6 +1950,9 @@ class MainActivity : Activity() {
         }
         runtime("Location", "For \"Use my current location\" and the {location} placeholder.",
             Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (Build.VERSION.SDK_INT >= 33) {
+            runtime("Notifications", "Shows a countdown with a Stop button during long waits.", Manifest.permission.POST_NOTIFICATIONS)
+        }
         runtime("Send SMS", "For text-message actions set to send straight away.", Manifest.permission.SEND_SMS)
         runtime("Phone calls", "For call actions set to call straight away.", Manifest.permission.CALL_PHONE)
         col.addView(perms)

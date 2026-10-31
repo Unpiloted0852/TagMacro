@@ -1,0 +1,1 @@
+Long waits now work properly. A Wait of a minute or more (up to 24 hours) keeps counting while the phone sleeps or restarts, shows a live countdown in the app and in a notification, and no longer holds up other macros. New Stop button for running macros, and deleting a macro now stops it.

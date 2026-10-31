@@ -31,6 +31,14 @@
         "open my messaging app" or "open the dialer" options, neither is needed.
     -->
     <uses-permission android:name="android.permission.SEND_SMS" />
+    <!--
+        For Wait actions of a minute or longer. Exact alarms and the countdown notification are
+        optional: without them a long wait still runs, but may end late or show no notification.
+        Boot completed only re-arms waits in progress, because alarms don't survive a restart.
+    -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
 
@@ -102,6 +110,13 @@
                 android:name="android.nfc.action.TECH_DISCOVERED"
                 android:resource="@xml/nfc_tech_filter" />
         </activity-alias>
+
+        <receiver android:name=".WaitReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Only the system can bind to this (BIND_ACCESSIBILITY_SERVICE). -->
         <service

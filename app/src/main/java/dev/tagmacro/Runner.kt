@@ -32,6 +32,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -41,6 +42,29 @@ object Runner {
 
     /** One macro at a time, in the order they were triggered. */
     private val executor = Executors.newSingleThreadExecutor()
+
+    /** One triggered macro, from being queued until it finishes. */
+    private class Run(val name: String, ids: Set<String>) {
+        @Volatile var cancelled = false
+        val macroIds: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().apply { addAll(ids) }
+    }
+
+    /** Waits this long or longer use an alarm and free the queue. Shorter ones just pause. */
+    private const val TIMED_WAIT_MIN_SEC = 60.0
+
+    /** Thrown by a long Wait. Carries where to continue, collected on the way up the call chain. */
+    private class ParkSignal(val seconds: Long) : Throwable(null, null, false, false) {
+        val frames = mutableListOf<ParkedFrame>()
+        var failed = false
+    }
+
+    private val runs = CopyOnWriteArrayList<Run>()
+    private val runLock = Any()
+    @Volatile private var current: Run? = null
+    private var worker: Thread? = null
+
+    /** Called on the main thread when a macro starts, finishes or is queued. */
+    var onRunsChanged: (() -> Unit)? = null
 
     private const val MAX_DEPTH = 5
 
@@ -55,20 +79,152 @@ object Runner {
         onFinished: (() -> Unit)? = null
     ) {
         val app = ctx.applicationContext
+        val ahead = runs.firstOrNull()
+        if (ahead != null) toast(app, "${macro.name} will run after ${ahead.name} finishes. You can stop that on the Macros tab.")
+        enqueue(app, Run(macro.name, setOf(macro.id)), source, tagUid, mutableListOf(), false, onFinished) { lines ->
+            execute(app, macro, source, tagUid, checkConstraints, 0, lines)
+        }
+    }
+
+    /** Continues a macro whose timed wait has ended. Each wait resumes once, however often it's asked. */
+    fun resume(ctx: Context, id: String, onFinished: (() -> Unit)? = null) {
+        val app = ctx.applicationContext
+        val r = Store.takeParked(id)
+        if (r == null) {
+            if (onFinished != null) main.post(onFinished)
+            return
+        }
+        Waits.clear(app, id)
+        val lines = r.lines.toMutableList()
+        val lateSec = (System.currentTimeMillis() - r.wakeAt) / 1000
+        if (lateSec >= 120) lines.add("Continued ${Waits.formatDuration(lateSec)} late (the phone was off, or Android delayed it)")
+        val launching = r.frames.sumOf { f -> f.macro.actions.drop(f.next).count { it.enabled && it.type in LAUNCH_ACTIONS } }
+        if (launching > 0 && !canLaunchFromBackground(app)) {
+            lines.add("Warning: Android usually blocks opening other apps after a long wait unless TagMacro has \"Display over other apps\" (see the Settings tab). Blocked launches are silent, so the steps below may still say OK.")
+        }
+        enqueue(app, Run(r.name, r.macroIds), r.source, r.tagUid, lines, r.failed, onFinished) { l ->
+            runFrames(app, r.frames, r.source, r.tagUid, l)
+        }
+    }
+
+    private fun runFrames(
+        ctx: Context, frames: List<ParkedFrame>, source: String, tagUid: String?, lines: MutableList<String>
+    ): Boolean {
+        var allOk = true
+        for ((i, f) in frames.withIndex()) {
+            try {
+                if (!execute(ctx, f.macro, source, tagUid, false, f.depth, lines, f.next)) {
+                    allOk = false
+                    if (frames.getOrNull(i + 1)?.macro?.stopOnError == true) {
+                        lines.add("Stopped because \"Stop at the first failed action\" is on")
+                        break
+                    }
+                }
+            } catch (p: ParkSignal) {
+                p.frames.addAll(frames.drop(i + 1))
+                p.failed = p.failed || !allOk
+                throw p
+            }
+        }
+        return allOk
+    }
+
+    private fun enqueue(
+        app: Context, run: Run, source: String, tagUid: String?, lines: MutableList<String>, failedEarlier: Boolean,
+        onFinished: (() -> Unit)?, work: (MutableList<String>) -> Boolean
+    ) {
+        runs.add(run)
+        changed()
         executor.execute {
-            val lines = mutableListOf<String>()
+            synchronized(runLock) {
+                current = run
+                worker = Thread.currentThread()
+            }
+            changed()
+            var parked = false
             val ok = try {
-                execute(app, macro, source, tagUid, checkConstraints, 0, lines)
+                if (run.cancelled) throw InterruptedException()
+                work(lines)
+            } catch (e: InterruptedException) {
+                lines.add("Stopped before it finished")
+                false
+            } catch (p: ParkSignal) {
+                if (run.cancelled) {
+                    lines.add("Stopped before it finished")
+                } else {
+                    park(app, run, p, source, tagUid, lines, failedEarlier)
+                    parked = true
+                }
+                false
             } catch (t: Throwable) {
                 lines.add("Stopped by an unexpected error: ${t.javaClass.simpleName}: ${t.message}")
                 false
             }
-            Store.addLog(LogEntry(System.currentTimeMillis(), macro.name, source, ok, lines))
-            val s = Store.settings()
-            if (!ok && s.toastOnError) toast(app, "${macro.name}: ${lines.lastOrNull() ?: "failed"}")
-            if (ok && s.toastOnSuccess) toast(app, "${macro.name}: done")
+            synchronized(runLock) {
+                current = null
+                worker = null
+                Thread.interrupted() // a stop that arrived as this run ended mustn't hit the next one
+            }
+            runs.remove(run)
+            if (!parked) {
+                val allOk = ok && !failedEarlier
+                Store.addLog(LogEntry(System.currentTimeMillis(), run.name, source, allOk, lines))
+                val s = Store.settings()
+                if (!run.cancelled) {
+                    if (!allOk && s.toastOnError) toast(app, "${run.name}: ${lines.lastOrNull() ?: "failed"}")
+                    if (allOk && s.toastOnSuccess) toast(app, "${run.name}: done")
+                }
+            }
+            changed()
             if (onFinished != null) main.post(onFinished)
         }
+    }
+
+    /** Saves the run and sets the alarm. The queue moves on, so other macros can run meanwhile. */
+    private fun park(
+        app: Context, run: Run, p: ParkSignal, source: String, tagUid: String?, lines: List<String>, failedEarlier: Boolean
+    ) {
+        val r = ParkedRun(
+            UUID.randomUUID().toString(), run.name, run.macroIds.toSet(), p.frames,
+            System.currentTimeMillis() + p.seconds * 1000, source, tagUid, failedEarlier || p.failed, lines.toList()
+        )
+        Store.addParked(r)
+        Waits.schedule(app, r)
+        toast(app, "${run.name}: next step in ${Waits.formatDuration(p.seconds)}")
+    }
+
+    /** Ends a macro that is in a timed wait. */
+    fun stopParked(ctx: Context, id: String) {
+        val r = Store.takeParked(id) ?: return
+        Waits.clear(ctx.applicationContext, id)
+        Store.addLog(LogEntry(System.currentTimeMillis(), r.name, r.source, false, r.lines + "Stopped before it finished"))
+        changed()
+    }
+
+    /** The macro running now, or null. */
+    fun runningName(): String? = current?.name
+
+    /** How many macros are waiting behind the running one. */
+    fun waitingCount(): Int = runs.count { it !== current }
+
+    fun isBusy(): Boolean = runs.isNotEmpty()
+
+    /** Stops the running macro and everything queued behind it. */
+    fun stopAll() = runs.forEach { stop(it) }
+
+    /** Stops any run that is using this macro, including through "Run another macro". */
+    fun stopMacro(ctx: Context, id: String) {
+        runs.filter { id in it.macroIds }.forEach { stop(it) }
+        Store.parked().filter { id in it.macroIds }.forEach { stopParked(ctx, it.id) }
+    }
+
+    private fun stop(run: Run) = synchronized(runLock) {
+        run.cancelled = true
+        if (current === run) worker?.interrupt()
+    }
+
+    private fun changed() {
+        main.post { onRunsChanged?.invoke() }
     }
 
     /** Returns a reason the macro shouldn't run now, or null if it may run. */
@@ -108,7 +264,7 @@ object Runner {
 
     private fun execute(
         ctx: Context, m: Macro, source: String, tagUid: String?,
-        checkConstraints: Boolean, depth: Int, lines: MutableList<String>
+        checkConstraints: Boolean, depth: Int, lines: MutableList<String>, start: Int = 0
     ): Boolean {
         if (checkConstraints) {
             constraintProblem(m)?.let {
@@ -116,25 +272,35 @@ object Runner {
                 return false
             }
         }
-        Store.markRun(m.id)
+        current?.macroIds?.add(m.id)
+        if (start == 0) Store.markRun(m.id)
         val launching = m.actions.count { it.enabled && it.type in LAUNCH_ACTIONS }
-        if (launching > 1 && !canLaunchFromBackground(ctx)) {
+        if (start == 0 && launching > 1 && !canLaunchFromBackground(ctx)) {
             lines.add(
                 "Warning: this macro opens another app $launching times. Android blocks all but the " +
                     "first unless TagMacro has \"Display over other apps\" (see the Settings tab). " +
                     "Blocked launches are silent, so the steps below may still say OK."
             )
         }
-        if (m.actions.none { it.enabled }) {
+        if (start == 0 && m.actions.none { it.enabled }) {
             lines.add("This macro has no enabled actions")
             return false
         }
         var allOk = true
-        for (a in m.actions) {
-            if (!a.enabled) continue
+        for ((index, a) in m.actions.withIndex()) {
+            if (index < start || !a.enabled) continue
+            // Checked here too because some actions swallow the interrupt.
+            if (current?.cancelled == true) throw InterruptedException()
             val label = Specs.summary(a)
             val error = try {
                 perform(ctx, m, a, tagUid, depth, lines)
+            } catch (e: InterruptedException) {
+                throw e
+            } catch (p: ParkSignal) {
+                if (p.frames.isEmpty()) lines.add("Waiting: $label")
+                p.frames.add(ParkedFrame(m, index + 1, depth))
+                p.failed = p.failed || !allOk
+                throw p
             } catch (t: Throwable) {
                 "${t.javaClass.simpleName}: ${t.message}"
             }
@@ -229,8 +395,9 @@ object Runner {
             }
 
             "WAIT" -> {
-                val ms = (num("seconds", 1.0).coerceIn(0.0, 3600.0) * 1000).toLong()
-                Thread.sleep(ms)
+                val seconds = num("seconds", 1.0).coerceIn(0.0, Specs.MAX_WAIT_SEC)
+                if (seconds >= TIMED_WAIT_MIN_SEC) throw ParkSignal(seconds.toLong())
+                Thread.sleep((seconds * 1000).toLong())
                 null
             }
 
@@ -432,7 +599,12 @@ object Runner {
                 val other = Store.macro(p["macro"].orEmpty()) ?: return "That macro no longer exists"
                 if (other.id == m.id) return "A macro can't run itself"
                 val sub = mutableListOf<String>()
-                val ok = execute(ctx, other, "Called by ${m.name}", tagUid, true, depth + 1, sub)
+                val ok = try {
+                    execute(ctx, other, "Called by ${m.name}", tagUid, true, depth + 1, sub)
+                } catch (p: ParkSignal) {
+                    sub.forEach { lines.add("  [${other.name}] $it") }
+                    throw p
+                }
                 sub.forEach { lines.add("  [${other.name}] $it") }
                 if (ok) null else "The other macro didn't finish cleanly"
             }
