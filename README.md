@@ -103,7 +103,9 @@ down, usually after an interrupted download or a stopped sync. In order:
 2. Grant the other permissions from the Settings tab only if you use the actions that need them:
    - Do Not Disturb access: Do Not Disturb, ringer to or from Silent, ringtone/notification volume 0.
    - Modify system settings: brightness, screen timeout, auto-rotate.
-   - Display over other apps: macros that open another app more than once.
+   - Display over other apps: macros that open another app more than once, or after a long wait.
+   - Alarms and reminders: long waits end on time instead of possibly late.
+   - Notifications: countdown with a Stop button during long waits.
    - The accessibility service also enables Lock the screen.
 
 ## Test it safely
@@ -147,8 +149,10 @@ willing friend, run it with the phone unlocked, and read the Log tab.
 ## Auditing checklist
 
 - `AndroidManifest.xml`: the full permission list is NFC, VIBRATE, ACCESS_NOTIFICATION_POLICY,
-  SET_ALARM, WRITE_SETTINGS, SYSTEM_ALERT_WINDOW, location (fine and coarse), SEND_SMS and
-  CALL_PHONE. The last four are asked for only when you use a feature that needs them. No INTERNET, so
+  SET_ALARM, WRITE_SETTINGS, SYSTEM_ALERT_WINDOW, location (fine and coarse), SEND_SMS,
+  CALL_PHONE, SCHEDULE_EXACT_ALARM, POST_NOTIFICATIONS and RECEIVE_BOOT_COMPLETED. Location, SMS and
+  calls are asked for only when you use a feature that needs them. The last three are only for Wait
+  actions of a minute or longer: boot completed just re-arms waits in progress. No INTERNET, so
   Android blocks all network access. Location is requested only when you use a location feature,
   and read only through Android's own LocationManager (`Locator.kt`), with no Google libraries. WRITE_SETTINGS is optional and only used for brightness, timeout and auto-rotate.
   SYSTEM_ALERT_WINDOW is optional and inactive until you grant it; the app never draws an overlay.
@@ -186,4 +190,6 @@ willing friend, run it with the phone unlocked, and read the Log tab.
   the Settings tab. An enabled accessibility service also counts as an exemption. TagMacro keeps its
   invisible trigger screen up for the whole run and pauses between launches, which covers many
   cases on its own, but the permission is what makes it reliable.
-- Macros run one at a time; a long Wait delays any macro triggered after it.
+- Macros run one at a time, but a Wait of a minute or longer (up to 24 hours) is saved and uses an
+  alarm, so other macros can run meanwhile and it survives sleep and restarts. If the phone is off when
+  it ends, the macro continues when the phone is back on. Shorter waits hold the queue.
